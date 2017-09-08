@@ -1,14 +1,53 @@
-.PHONY: all clean
-CC = gcc
-CFLAGS = -g -Wall -Werror -std=c11 -lSDL2
-LDFLAGS =
-SOURCES = $(wildcard *.c)
-EXECUTABLES = $(SOURCES:.c=)
+# No default suffixes
+.SUFFIXES:
+# These targets are not files
+.PHONY: all windows clean debug
+# Compiler
+CC = g++
+# Compiler flags
+CFLAGS = -Wall -Wextra -Wno-unused-result -Isrc/include/
+# Optimization flags
+OPT_FLAGS = -O2 -flto
+# Linker flags
+LFLAGS = -lGL -lm -ldl -lglfw
+# Executable
+EXECUTABLE = bin/maze
+# Build Directories
+DIRECTORIES = bin/ obj/
+# Source directory
+SRC_DIR = src/
+# Object directory
+OBJ_DIR = obj/
+# Object files
+OBJS = maze.o stb_image.o gl3w.o
+# Object full path
+OBJS_FULL = $(addprefix $(OBJ_DIR), $(OBJS))
+# SL2 MINGW directory
+SDL2_MINGW_DIR = SDL2/
 
-all: $(EXECUTABLES)
+all: $(DIRECTORIES) $(EXECUTABLE)
 
-$(EXECUTABLES): $(SOURCES)
-	$(CC) $(CFLAGS) $(LDFLAGS) $@.c -o $@
+windows: CC=i686-w64-mingw32-gcc
+windows: CFLAGS+=-I$(SDL2_MINGW_DIR)i686-w64-mingw32/include/ -Dmain=SDL_main
+windows: LFLAGS=-L$(SDL2_MINGW_DIR)i686-w64-mingw32/lib/ -lmingw32 -lSDL2main -lSDL2 -mwindows
+windows: EXECUTABLE=bin/lbeditor.exe
+windows: all
+	cp $(SDL2_MINGW_DIR)lib/x86/SDL2.dll bin/
 
 clean:
-	rm -rf $(EXECUTABLES) $(OBJECTS)
+	rm -rf $(DIRECTORIES)
+
+debug: OPT_FLAGS=-ggdb
+debug: all
+
+$(DIRECTORIES):
+	mkdir -p $@
+
+$(EXECUTABLE): $(OBJS_FULL)
+	$(CC) $^ $(LFLAGS) $(OPT_FLAGS) -o $(EXECUTABLE)
+
+$(OBJ_DIR)%.o: $(SRC_DIR)%.c
+	$(CC) $< $(CFLAGS) $(OPT_FLAGS) -c -o $@
+
+$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
+	$(CC) $< $(CFLAGS) $(OPT_FLAGS) -c -o $@
