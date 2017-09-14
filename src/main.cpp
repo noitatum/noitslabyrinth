@@ -16,7 +16,6 @@
 
 using namespace std;
 
-#define COUNT(arr) (sizeof(arr) / sizeof(arr[0]))
 #define LIMIT(a, min, max) ((a) < (min) ? (min) : (a) > (max) ? (max) : (a))
 
 constexpr float PI = acos(-1);
@@ -26,12 +25,12 @@ unsigned int WIDTH = 800, HEIGHT = 600;
 const float sensitivity = 0.003f;
 
 // camera
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cam_pos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cam_front = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cam_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
 float yaw = -90.0f, pitch = 0.0f, fov = 45.0f;
-float lastX = WIDTH / 2.0, lastY = HEIGHT / 2.0;
+float xlast = WIDTH / 2.0, ylast = HEIGHT / 2.0;
 
 // timing
 float deltaTime = 0.0f, lastFrame = 0.0f;
@@ -42,7 +41,7 @@ bool mouse_press = false;
 // maze
 float maze_roll = 0.0f, maze_pitch = 0.0f;
 
-float vertices[] = {
+const vector<float> wall_verts = {
     -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 0.0f,
     0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
     -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
@@ -68,7 +67,7 @@ float vertices[] = {
     -0.5f, 0.5f,  0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f
 };
 
-float grass_verts[] = {
+const vector<float> floor_verts = {
     // First Triangle
     -0.5f, 0.0f,-0.5f, 0.0f, 0.0f,
     -0.5f, 0.0f, 0.5f, 0.0f, 1.0f,
@@ -79,21 +78,18 @@ float grass_verts[] = {
      0.5f, 0.0f, 0.5f, 1.0f, 1.0f,
 };
 
-void processInput(GLFWwindow* window) {
+void process_input(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-
-    float cameraSpeed = 5.0 * deltaTime;
+    float cam_speed = 10.0 * deltaTime;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraFront;
+        cam_pos += cam_speed * cam_front;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraFront;
+        cam_pos -= cam_speed * cam_front;
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -=
-            glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        cam_pos -= glm::normalize(glm::cross(cam_front, cam_up)) * cam_speed;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos +=
-            glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        cam_pos += glm::normalize(glm::cross(cam_front, cam_up)) * cam_speed;
 }
 
 void framebuffer_size_callback(GLFWwindow*, int width, int height) {
@@ -103,10 +99,10 @@ void framebuffer_size_callback(GLFWwindow*, int width, int height) {
 }
 
 void mouse_callback(GLFWwindow*, double xpos, double ypos) {
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
-    lastX = xpos;
-    lastY = ypos;
+    float xoffset = xpos - xlast;
+    float yoffset = ylast - ypos;
+    xlast = xpos;
+    ylast = ypos;
 
     xoffset *= sensitivity;
     yoffset *= sensitivity;
@@ -124,7 +120,7 @@ void mouse_callback(GLFWwindow*, double xpos, double ypos) {
     const float max = PI / 2 - 0.01f;
     pitch = LIMIT(pitch, -max, max);
     glm::vec3 front(cos(yaw) * cos(pitch), sin(pitch), sin(yaw) * cos(pitch));
-    cameraFront = glm::normalize(front);
+    cam_front = glm::normalize(front);
 }
 
 void mouse_button_callback(GLFWwindow*, int button, int action, int) {
@@ -171,117 +167,113 @@ void panic(const char* format, ...) {
     va_start(l, format);
     vfprintf(stderr, format, l);
     va_end(l);
+    _Exit(-1);
 }
+
+class vabo {
+    unsigned vao, vbo, vcount;
+
+    public:
+        vabo(const vector<unsigned> &counts, const vector<float> &attrs) {
+            glGenVertexArrays(1, &vao);
+            glGenBuffers(1, &vbo);
+            glBindVertexArray(vao);
+            glBindBuffer(GL_ARRAY_BUFFER, vbo);
+            glBufferData(GL_ARRAY_BUFFER, attrs.size() * sizeof(float),
+                         attrs.data(), GL_STATIC_DRAW);
+            unsigned sum = 0;
+            for (unsigned a : counts)
+                sum += a;
+            vcount = attrs.size() / sum;
+            for (unsigned i = 0, partial = 0; i < counts.size(); i++) {
+                glVertexAttribPointer(i, counts[i], GL_FLOAT, GL_FALSE,
+                                      sum * sizeof(float),
+                                      (void*) (uintptr_t) partial);
+                glEnableVertexAttribArray(i);
+                partial += counts[i] * sizeof(float);
+            }
+        }
+
+        ~vabo() {
+            glDeleteVertexArrays(1, &vao);
+            glDeleteBuffers(1, &vbo);
+        }
+
+        void use_vao() {
+            glBindVertexArray(vao);
+        }
+
+        void draw_all() {
+            glDrawArrays(GL_TRIANGLES, 0, vcount);
+        }
+};
 
 int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow* window =
-        glfwCreateWindow(WIDTH, HEIGHT, "Maze", NULL, NULL);
-    if (window == NULL) {
-        std::cout << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Maze", NULL, NULL);
+    if (!window)
+        panic("Failed to create GLFW window");
+    // Create context and callbacks
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
+    // Initialize gl3w
     if (gl3wInit())
         panic("Failed to initialize OpenGL\n");
-
     if (!gl3wIsSupported(3, 3))
         panic("OpenGL 3.3 is not supported\n");
-
     printf("OpenGL %s, GLSL %s\n", glGetString(GL_VERSION),
            glGetString(GL_SHADING_LANGUAGE_VERSION));
-
-    // configure global opengl state
+    // Configure global OpenGL state
     glEnable(GL_DEPTH_TEST);
-
-    // build and compile our shader zprogram
-    Shader ourShader("src/camera.vert", "src/camera.frag");
-
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-
-    unsigned int VBO[2], VAO[2];
-    glGenVertexArrays(COUNT(VAO), VAO);
-    glGenBuffers(COUNT(VBO), VBO);
-    // Cubes
-    glBindVertexArray(VAO[0]);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    // Grass
-    glBindVertexArray(VAO[1]);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(grass_verts), grass_verts, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    // load and create a texture
-    // -------------------------
+    // Compile shader
+    Shader shader("src/camera.vert", "src/camera.frag");
+    // Set up vertex and buffer data with attributes
+    vabo vabo_cube({3, 2}, wall_verts);
+    vabo vabo_floor({3, 2}, floor_verts);
+    // Load textures
     stbi_set_flip_vertically_on_load(true);
     unsigned tx_wall = load_texture("./textures/wall_0.png");
     unsigned tx_grass = load_texture("./textures/grass_0.png");
     unsigned tx_marble = load_texture("./textures/marble_0.png");
-    ourShader.use();
-    ourShader.setInt("texture0", 0);
-
+    shader.use();
+    shader.setInt("texture0", 0);
+    // Create maze, initialize variables
     vector<vector<bool>> maze = make_maze(10);
     float msize = maze.size() / 2;
-
     float player_x = 1, player_y = 1;
     float player_vx = 0, player_vy = 0;
-
+    // Render loop
+    shader.use();
     while (!glfwWindowShouldClose(window)) {
+        // Delta time
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-
-        processInput(window);
-
+        // Keyboard input
+        process_input(window);
+        // Clear screen and depth buffers
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // bind textures on corresponding texture units
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, tx_wall);
-
-        ourShader.use();
-
+        // Set projection based on fov and screen width
         glm::mat4 projection = glm::perspective(
             glm::radians(fov), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-        ourShader.setMat4("projection", projection);
-
-        // camera/view transformation
-        glm::mat4 view =
-            glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        ourShader.setMat4("view", view);
-
+        shader.setMat4("projection", projection);
+        // Camera/View transformation
+        glm::mat4 view = glm::lookAt(cam_pos, cam_pos + cam_front, cam_up);
+        shader.setMat4("view", view);
         // Maze rotation transformation
         glm::mat4 maze_rot(1);
         maze_rot = rotate(maze_rot, maze_roll, glm::vec3(0, 0, 1));
         maze_rot = rotate(maze_rot, maze_pitch, glm::vec3(1, 0, 0));
-
+        // Player collision
         const float gravity = 0.1, max_vel = 0.1, psize = 0.25;
-
-        // Player movement
         bool y_hit = false, x_hit = false;
         raycast rays[4];
         rays[0] = DDA_raycast(maze, player_x + psize, player_y + psize,
@@ -298,10 +290,12 @@ int main() {
             if (rays[i].hit && rays[i].yhit)
                 y_hit = true;
         }
+
+        // Player movement and bounce
         if (x_hit)
-            player_vx = -player_vx;
+            player_vx = -player_vx / 3;
         if (y_hit)
-            player_vy = -player_vy;
+            player_vy = -player_vy / 3;
         player_x += player_vx;
         player_y += player_vy;
         // Player acceleration
@@ -309,53 +303,47 @@ int main() {
         player_vy += (maze_pitch / (PI / 2)) * gravity;
         player_vx = LIMIT(player_vx, -max_vel, max_vel);
         player_vy = LIMIT(player_vy, -max_vel, max_vel);
-
         // Render maze
-        glBindVertexArray(VAO[0]);
+        vabo_cube.use_vao();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tx_wall);
         for (unsigned int i = 0; i < maze.size(); i++) {
             for (unsigned int j = 0; j < maze[0].size(); j++) {
                 if (maze[i][j]) {
                     glm::mat4 model = translate(maze_rot,
                                       glm::vec3(i - msize, 0, j - msize));
-                    ourShader.setMat4("model", model);
-                    glDrawArrays(GL_TRIANGLES, 0, 36);
+                    shader.setMat4("model", model);
+                    vabo_cube.draw_all();
                 }
             }
         }
         // Render skybox
-        {
-            glm::mat4 model(1);
-            model = scale(model, glm::vec3(maze.size() * 2));
-            ourShader.setMat4("model", model);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, tx_marble);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
+        glm::mat4 model(1);
+        model = scale(model, glm::vec3(maze.size() * 2));
+        shader.setMat4("model", model);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tx_marble);
+        vabo_cube.draw_all();
         // Render player
-        {
-            glm::mat4 model = maze_rot;
-            model = translate(model, glm::vec3(player_x - msize, -psize, player_y - msize));
-            model = scale(model, glm::vec3(0.5));
-            ourShader.setMat4("model", model);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-        // Render floor
-        glm::mat4 model = maze_rot;
-        model = translate(model, glm::vec3(0, -0.5, 0));
+        glm::vec3 player_pos(player_x - msize, -psize, player_y - msize);
+        model = maze_rot;
+        model = translate(model, player_pos);
+        model = scale(model, glm::vec3(0.5));
+        shader.setMat4("model", model);
+        vabo_cube.draw_all();
+        // Render floor, avoid Z fighting
+        model = maze_rot;
+        model = translate(model, glm::vec3(0, -0.501, 0));
         model = scale(model, glm::vec3(maze.size()));
-        ourShader.setMat4("model", model);
+        shader.setMat4("model", model);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tx_grass);
-        glBindVertexArray(VAO[1]);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
-
-
+        vabo_floor.use_vao();
+        vabo_floor.draw_all();
+        // Render and poll
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-    glDeleteVertexArrays(COUNT(VAO), VAO);
-    glDeleteBuffers(COUNT(VBO), VBO);
     glfwTerminate();
     return 0;
 }
