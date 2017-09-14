@@ -224,8 +224,9 @@ int main() {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     // Initialize gl3w
-    if (gl3wInit())
-        panic("Failed to initialize OpenGL\n");
+    int error = gl3wInit();
+    if (error)
+        panic("Failed to initialize OpenGL, gl3w error: %i\n", error);
     if (!gl3wIsSupported(3, 3))
         panic("OpenGL 3.3 is not supported\n");
     printf("OpenGL %s, GLSL %s\n", glGetString(GL_VERSION),
