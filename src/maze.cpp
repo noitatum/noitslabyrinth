@@ -54,7 +54,7 @@ maze make_maze(unsigned size) {
         for (unsigned j = 0; j < size - 1; j++)
             edges.push_back((edge) {i, j, i, j + 1});
     random_device rd;
-    mt19937 g(rd());
+    minstd_rand g(rd());
     shuffle(edges.begin(), edges.end(), g);
     disjoint_sets set(size * size);
     for (edge e : edges) {
