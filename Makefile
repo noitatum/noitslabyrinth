@@ -22,17 +22,8 @@ OBJ_DIR = obj/
 OBJS = main.o stb_image.o gl3w.o maze.o shader.o
 # Object full path
 OBJS_FULL = $(addprefix $(OBJ_DIR), $(OBJS))
-# SL2 MINGW directory
-SDL2_MINGW_DIR = SDL2/
 
 all: $(DIRECTORIES) $(EXECUTABLE)
-
-windows: CC=i686-w64-mingw32-gcc
-windows: CFLAGS+=-I$(SDL2_MINGW_DIR)i686-w64-mingw32/include/ -Dmain=SDL_main
-windows: LFLAGS=-L$(SDL2_MINGW_DIR)i686-w64-mingw32/lib/ -lmingw32 -lSDL2main -lSDL2 -mwindows
-windows: EXECUTABLE=bin/lbeditor.exe
-windows: all
-	cp $(SDL2_MINGW_DIR)lib/x86/SDL2.dll bin/
 
 clean:
 	rm -rf $(DIRECTORIES)
