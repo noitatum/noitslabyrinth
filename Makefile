@@ -19,7 +19,7 @@ SRC_DIR = src/
 # Object directory
 OBJ_DIR = obj/
 # Object files
-OBJS = maze.o stb_image.o gl3w.o
+OBJS = main.o stb_image.o gl3w.o maze.o shader.o
 # Object full path
 OBJS_FULL = $(addprefix $(OBJ_DIR), $(OBJS))
 # SL2 MINGW directory
